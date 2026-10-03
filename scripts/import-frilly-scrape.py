@@ -74,7 +74,7 @@ schema["Sites"] = dict(
         f("Title", "string", description="Brand name shown in the header and page titles."),
         f("Tagline", "string", description="The hero line on the home page."),
         f("BaseUrl", "string", description="Public origin, no trailing slash. Every absolute URL in the rulebook is derived from it."),
-        f("Today", "string", description="The current date (YYYY-MM-DD) as the site sees it. Events compare their date to this to decide if they are upcoming. Bump it to move time forward."),
+        f("Today", "datetime", description="The current date (YYYY-MM-DD) as the site sees it. Events compare their date to this to decide if they are upcoming. Bump it to move time forward."),
         f("FeaturedLimit", "integer", description="How many featured listings the home page shows."),
         f("JoinUrl", "string", description="Where the 'Join Now' call to action points."),
         f("VisionUrl", "string", description="Where the 'Vision' nav link points."),
@@ -190,7 +190,7 @@ schema["Listings"] = dict(
         f("LogoUrl", "string", description="Logo image URL; empty if none."),
         f("IsFeatured", "boolean", description="Shown in the home page 'Featured today' strip."),
         f("IsPublished", "boolean", description="Visible on the public site."),
-        f("LastUpdated", "string", description="ISO timestamp of the last content change (from the source site)."),
+        f("LastUpdated", "datetime", description="ISO timestamp of the last content change (from the source site)."),
         f("SourceId", "string", description="The id the current site uses for this record (for reconciliation)."),
         calc("Name", "string", "={{Title}}", "Display alias."),
         lk("CityPathPrefix", "string", "City", "Cities", "PathPrefix", "CityId", "URL prefix from the city."),
@@ -242,8 +242,9 @@ schema["Events"] = dict(
         f("Venue", "string", "relationship", description="The listing hosting the event.", related="Listings"),
         f("Title", "string", description="Event name."),
         f("Description", "string", description="Long description."),
-        f("StartsAt", "string", description="ISO local start (2026-10-05T18:30:00)."),
-        f("EndsAt", "string", description="ISO local end; empty if unknown."),
+        f("StartsAt", "datetime", description="Local start timestamp (2026-10-05T18:30:00)."),
+        f("EventDate", "datetime", description="Calendar date of the event (YYYY-MM-DD). Compared to the site's Today to decide if it is upcoming."),
+        f("EndsAt", "datetime", nullable=True, description="Local end timestamp; null if unknown."),
         f("DoorTime", "string", description="Free-text door/show line (Doors: 6:30 pm | Show: 8:00 pm)."),
         f("Price", "string", description="Free-text price ($15 - $20, Free, TBA)."),
         f("EventKind", "string", description="schema.org type: Event, MusicEvent, TheaterEvent."),
@@ -253,14 +254,12 @@ schema["Events"] = dict(
         f("SourceUrl", "string", description="Ticket / source page."),
         f("Status", "string", description="scheduled | cancelled | postponed."),
         calc("Name", "string", "={{Title}}", "Display alias."),
-        lk("SiteToday", "string", "Site", "Sites", "Today", "SiteId", "The site's current date."),
+        lk("SiteToday", "datetime", "Site", "Sites", "Today", "SiteId", "The site's current date."),
         lk("SiteBaseUrl", "string", "Site", "Sites", "BaseUrl", "SiteId", "Site origin."),
         lk("CityPathPrefix", "string", "City", "Cities", "PathPrefix", "CityId", "URL prefix."),
         lk("VenueTitle", "string", "Venue", "Listings", "Title", "ListingId", "Venue name."),
         lk("VenueAddress", "string", "Venue", "Listings", "FullAddress", "ListingId", "Venue address line."),
         lk("VenueEntityPath", "string", "Venue", "Listings", "EntityPath", "ListingId", "Link back to the venue page."),
-        calc("EventDate", "string", "=LEFT({{StartsAt}}, 10)", "YYYY-MM-DD."),
-        calc("StartTime", "string", "=MID({{StartsAt}}, 12, 5)", "HH:MM."),
         calc("IsUpcoming", "boolean", "={{EventDate}} >= {{SiteToday}}", "On or after the site's Today."),
         calc("IsToday", "boolean", "={{EventDate}} = {{SiteToday}}", "Happening today."),
         calc("IsPast", "boolean", "=NOT({{IsUpcoming}})", "Already happened."),
@@ -270,12 +269,12 @@ schema["Events"] = dict(
         calc("HasPrice", "boolean", "=LEN({{Price}}) > 0", "A price line is known."),
         calc("PriceLabel", "string", "=IF({{HasPrice}}, {{Price}}, \"TBA\")", "What the card prints under 'Price:'."),
         calc("HasImage", "boolean", "=LEN({{ImageUrl}}) > 0", "Has a poster."),
-        calc("HasEndTime", "boolean", "=LEN({{EndsAt}}) > 0", "End time known."),
         calc("IsMusic", "boolean", "={{EventKind}} = \"MusicEvent\"", "Concert-type event."),
         calc("EventPath", "string", "={{CityPathPrefix}} & \"/events/\" & {{EventId}}", "Site-relative path."),
         calc("EventUrl", "string", "={{SiteBaseUrl}} & {{EventPath}}", "Absolute URL."),
         calc("Headline", "string", "={{Title}} & \" at \" & {{VenueTitle}}", "Title plus venue."),
-        calc("WhenLabel", "string", "={{EventDate}} & \" | \" & {{DoorTime}}", "Date plus doors line."),
+        calc("WhenLabel", "string", "=IF(LEN({{DoorTime}}) > 0, {{DoorTime}}, \"See venue for times\")", "The doors/show line, or a fallback when none is known."),
+        calc("IsTicketed", "boolean", "=AND({{HasPrice}}, NOT({{IsFree}}))", "Costs money to attend."),
         calc("ShortDescription", "string", "=LEFT({{Description}}, 160)", "Card excerpt."),
     ],
     data=[],
@@ -447,7 +446,11 @@ subs = OrderedDict()
 listing_ids = set()
 
 
+STATE_CODES = {"wisconsin": "WI", "tennessee": "TN", "illinois": "IL", "minnesota": "MN"}
+
+
 def city_key(state_slug, city_slug, city_name, state_code):
+    state_code = STATE_CODES.get(str(state_code).lower(), STATE_CODES.get(state_slug, str(state_code)[:2].upper()))
     cid = f"{city_slug}-{state_code.lower()}"
     if cid not in cities:
         cities[cid] = OrderedDict(CityId=cid, Site="frilly", StateSlug=state_slug, CitySlug=city_slug,
@@ -523,7 +526,7 @@ for path in sorted(glob.glob(os.path.join(SCRAPE, "events", "*.json"))):
     schema["Events"]["data"].append(OrderedDict(
         EventId=d["slug"], Site="frilly", City=cid, Venue=venue, Title=(ev.get("name") or d["slug"]).strip(),
         Description=(ev.get("description") or "").strip(), StartsAt=ev.get("startDate") or "",
-        EndsAt=ev.get("endDate") or "", DoorTime=ev.get("doorTime") or "", Price=price,
+        EndsAt=ev.get("endDate") or None, EventDate=(ev.get("startDate") or "")[:10], DoorTime=ev.get("doorTime") or "", Price=price,
         EventKind=str(ev.get("@type") or "Event"), Keywords=kw,
         Genres=", ".join(g.get("name", "") for g in genres if isinstance(g, dict)),
         ImageUrl=ev.get("image") if isinstance(ev.get("image"), str) else "", SourceUrl=ev.get("url") or "",
