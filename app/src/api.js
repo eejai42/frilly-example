@@ -3,7 +3,7 @@
 // here: flags, counts, URLs and labels are derived fields coming off the wire.
 // Nothing is cached at module scope on purpose: the schema itself changes when
 // the rulebook changes.
-export const API = import.meta.env.VITE_API_URL || 'http://localhost:42441';
+export const API = import.meta.env.VITE_API_URL ?? 'http://localhost:42441';
 
 async function http(path, init) {
   const res = await fetch(`${API}${path}`, {

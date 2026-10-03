@@ -1,0 +1,5 @@
+**/node_modules
+**/dist
+.git
+effortless-rulebook/effortless-editor-src
+docs
