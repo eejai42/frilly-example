@@ -1,0 +1,15 @@
+/**/obj/**/*
+/**/bin/**/*
+/**/.ssotme/**/*
+/**/.effortless/**/*
+/**/node_modules/**/*
+/**/.vs/**/*
+/**/.vscode/**/*
+effortless.env
+.DS_Store
+dist/
+effortless-rulebook/effortless-editor-src/
+effortless-rulebook/*.editor-settings.json
+effortless-rulebook/*.uncommitted*
+app/test-results/
+app/playwright-report/
