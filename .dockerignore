@@ -1,5 +1,8 @@
 **/node_modules
 **/dist
 .git
-effortless-rulebook/effortless-editor-src
+effortless-rulebook/effortless-editor-src/admin-portal
+effortless-rulebook/effortless-editor-src/rulespeak
+effortless-rulebook/effortless-editor-src/xlsx
+effortless-rulebook/effortless-editor-src/.db-applied
 docs

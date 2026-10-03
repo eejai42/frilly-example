@@ -7,6 +7,14 @@ ORG="${CPLN_ORG:-effortlessapi}"
 GVC="${CPLN_GVC:-ssotme-tools}"
 VERSION="$(date -u +%Y-%m-%d-%H%M)"
 IMAGE="frilly-prototype:$VERSION"
+SRC=effortless-rulebook/effortless-editor-src
+if [ ! -f "$SRC/api/index.js" ] || [ ! -f "$SRC/postgres/reset-rulebook-db.sh" ]; then
+  echo "▸ generating the backend from the rulebook into $SRC …"
+  mkdir -p "$SRC/postgres" && cp effortless-rulebook/docker/effortless.editor.json "$SRC/effortless.json"
+  ln -sfn .. "$SRC/effortless-rulebook"
+  cp deploy/chmod-initdb.sh deploy/run-rulebook-db-reset.sh "$SRC/postgres/"
+  ( cd "$SRC" && effortless initdb -disable && effortless chmodinitdb -disable && effortless build )
+fi
 echo "▸ org=$ORG gvc=$GVC image=$IMAGE"
 cpln image build --name "$IMAGE" --org "$ORG" --dockerfile ./deploy/Dockerfile --push .
 tmp="$(mktemp)"
